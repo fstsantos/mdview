@@ -27,15 +27,26 @@ It is a single Python file with no dependencies beyond the standard library.
 
 ## Installation
 
-There is nothing to install: the `mdview` file just has to be executable and on
-your `PATH`.
+The whole program is the single file `mdview.py`. `make install` copies it to
+your `PATH` as the `mdview` command:
 
 ```sh
-chmod +x mdview
-cp mdview ~/.local/bin/
+sudo make install                # system-wide: /usr/local/bin/mdview
+make install PREFIX=~/.local     # current user only: ~/.local/bin/mdview
 ```
 
-You can also run it directly with `python3 mdview FILE.md`.
+Other targets:
+
+```sh
+make install-link PREFIX=~/.local   # symlink to this checkout instead of copying
+sudo make uninstall                 # pass the same PREFIX used on install
+```
+
+If the destination directory is not on your `PATH`, the install prints the line
+to add to your shell profile.
+
+You can also run it without installing: `./mdview.py FILE.md` or
+`python3 mdview.py FILE.md`.
 
 ## Usage
 
@@ -115,7 +126,7 @@ reference links (`[text][ref]`), footnotes and HTML (except `<br>`).
 
 ## How the code is organized
 
-Everything lives in the `mdview` file, split into sections that form a
+Everything lives in the `mdview.py` file, split into sections that form a
 three-stage pipeline:
 
 | Stage | Where | What it does |
