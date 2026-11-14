@@ -15,7 +15,10 @@ How it works (three stages, each in its own section of this file):
 3. `Pager`      paints the lines with the chosen theme (ANSI codes) and handles the keyboard.
 
 Keeping "style" (stage 2) apart from "color" (stage 3) is what lets a single
-key switch themes without rendering the document again.
+key switch themes without rendering the document again. The one exception is
+the family of ornaments: the ANSI-art themes draw headings, rules and code
+blocks with shaded blocks instead of box-drawing lines, so switching between
+the two families renders the document again.
 """
 
 from __future__ import annotations
@@ -85,6 +88,130 @@ THEMES: dict[str, dict[str, tuple[int, int]]] = {
         "logo0": (1, 15), "logo1": (9, 15), "logo2": (3, 15),
     },
 }  # fmt: skip
+
+
+def ansi_theme(
+    ramp: tuple[int, int, int, int],
+    title: tuple[int, int],
+    hot: int,
+    accent: int,
+    second: int,
+    code: tuple[int, int],
+) -> dict[str, tuple[int, int]]:
+    """Colors of an ANSI-art theme, in the manner of the 90s BBS art groups.
+
+    The page is black and everything is lit by `ramp`, four palette indexes
+    going from dark to bright; shaded blocks (░▒▓█) painted along it give the
+    gradients. `title` is the (foreground, background) of banners, bars and
+    dialogs, `hot` the highlight over that background, `accent` and `second`
+    the two colors that stand out from the ramp, `code` the colors of code.
+    """
+    dark, mid, bright, peak = ramp
+    title_bg, code_bg = title[1], code[1]
+    return {
+        "text": (7, 0), "strong": (15, 0), "em": (second, 0),
+        "h1": title, "h1box": (title_bg, 0), "shadow": (8, 0),
+        "h2": (accent, 0), "h2deco": (mid, 0), "h3": (bright, 0), "h4": (15, 0),
+        "rule": (dark, 0), "hrdeco": (accent, 0),
+        "code": code, "codeblk": code, "codebox": (code_bg, 0), "codelbl": (accent, code_bg),
+        "link": (bright, 0), "linkref": (mid, 0),
+        "quotebar": (second, 0), "bullet": (accent, 0),
+        "tborder": (mid, 0), "th": (accent, 0), "match": (0, 15),
+        "frame": (mid, 0), "sbar": (mid, 0),
+        "bar": title, "barhot": (hot, title_bg),
+        "dlg": title, "dlghot": (hot, title_bg), "dlgsel": (15, 0), "dlgshadow": (7, 8),
+        "logo0": (peak, 0), "logo1": (bright, 0), "logo2": (mid, 0),
+        # the ramp itself, used by the gradients (only the ANSI-art ornaments need it)
+        "g0": (dark, 0), "g1": (mid, 0), "g2": (bright, 0), "g3": (peak, 0),
+    }  # fmt: skip
+
+
+ANSI_THEMES = {
+    # Acid: blue fading into cyan and white, with yellow lettering.
+    "acid": ansi_theme(ramp=(1, 9, 11, 15), title=(15, 1), hot=14, accent=14, second=13, code=(11, 1)),
+    # Ice: cold grays and cyans, white highlights.
+    "ice": ansi_theme(ramp=(8, 3, 11, 15), title=(0, 3), hot=15, accent=15, second=9, code=(11, 8)),
+    # Fire: red, orange-red, yellow, white, like a flame.
+    "fire": ansi_theme(ramp=(4, 12, 14, 15), title=(15, 4), hot=14, accent=14, second=12, code=(14, 8)),
+    # Toxic: phosphor green going to yellow.
+    "toxic": ansi_theme(ramp=(2, 10, 14, 15), title=(0, 2), hot=14, accent=14, second=10, code=(10, 8)),
+    # Neon: magenta and cyan on black.
+    "neon": ansi_theme(ramp=(5, 13, 11, 15), title=(15, 5), hot=11, accent=11, second=13, code=(13, 8)),
+}
+THEMES.update(ANSI_THEMES)
+DEFAULT_THEME = "dark"
+
+# theme -> (display name, one-line description). The key of THEMES is what
+# --theme takes; the display name is what the screen shows.
+THEME_INFO = {
+    "dark": ("DOS Blue", "the classic blue of DOS editors and file managers"),
+    "light": ("Paper White", "white paper with navy bars, like Windows 3.x"),
+    "acid": ("Acid Wave", "ANSI art: blue fading into cyan and white, yellow lettering"),
+    "ice": ("Ice Cold", "ANSI art: cold grays and cyans, white highlights"),
+    "fire": ("Fire Storm", "ANSI art: red, orange, yellow and white, like a flame"),
+    "toxic": ("Toxic Green", "ANSI art: phosphor green going to yellow"),
+    "neon": ("Neon Night", "ANSI art: magenta and cyan"),
+}
+
+
+def theme_title(theme: str) -> str:
+    return THEME_INFO.get(theme, (theme.capitalize(), ""))[0]
+
+
+# --- saved default -----------------------------------------------------------
+# The default theme lives in a one-setting `key = value` file, so that it can
+# also be edited by hand.
+
+
+def config_path() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return Path(base) / PROG / "config"
+
+
+def saved_theme() -> str | None:
+    """The theme saved as the default, or None if there is none (or it is not a known theme)."""
+    try:
+        lines = config_path().read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in lines:
+        key, sep, value = line.partition("=")
+        if sep and key.strip() == "theme" and value.strip() in THEMES:
+            return value.strip()
+    return None
+
+
+def save_theme(theme: str) -> None:
+    """Save `theme` as the default, keeping any other line of the file. Raises OSError."""
+    path = config_path()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        lines = []
+    lines = [line for line in lines if line.partition("=")[0].strip() != "theme"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join([*lines, f"theme = {theme}"]) + "\n", encoding="utf-8")
+
+
+def default_theme() -> str:
+    """The theme used without --theme: MDVIEW_THEME, then the saved one, then DEFAULT_THEME."""
+    env = os.environ.get("MDVIEW_THEME")
+    if env in THEMES:
+        return env
+    return saved_theme() or DEFAULT_THEME
+
+
+def save_theme_message(theme: str) -> str:
+    """Save `theme` as the default and describe the outcome in one line."""
+    try:
+        save_theme(theme)
+    except OSError as error:
+        return f"Could not save the default theme: {error.strerror or error}"
+    message = f"Default theme: {theme_title(theme)}"
+    env = os.environ.get("MDVIEW_THEME")
+    if env in THEMES and env != theme:
+        message += " (but MDVIEW_THEME is set and wins)"
+    return message
 
 # flag -> SGR attribute code
 SGR_ATTRS = (("b", "1"), ("i", "3"), ("u", "4"), ("s", "9"))
@@ -547,7 +674,8 @@ class Renderer:
 
     BULLETS = "■►•·"  # one per nesting level
 
-    def __init__(self) -> None:
+    def __init__(self, ansi: bool = False) -> None:
+        self.ansi = ansi  # ornaments made of shaded blocks (ANSI-art themes) instead of lines
         self.links: list[str] = []  # link targets, numbered in the footer (as in Lynx)
         self.list_depth = 0
         self._renderers = {
@@ -584,7 +712,11 @@ class Renderer:
 
     def link_footer(self, width: int) -> list[Line]:
         label = "─── LINKS "
-        out: list[Line] = [[], [(label + "─" * max(width - len(label), 0), "rule", "")]]
+        if self.ansi:
+            title: Line = [("▓▒░ LINKS ", "g1", ""), *self.fade("─", max(width - len(label), 0))]
+        else:
+            title = [(label + "─" * max(width - len(label), 0), "rule", "")]
+        out: list[Line] = [[], title]
         for number, href in enumerate(self.links, 1):
             out += wrap([(f"[{number}] ", "linkref", ""), (href, "link", "")], width)
         return out
@@ -640,6 +772,14 @@ class Renderer:
         rest = rest or (" " * text_width(first[0]), first[1], "")
         return [[first if k == 0 else rest, *line] for k, line in enumerate(lines)]
 
+    @staticmethod
+    def fade(char: str, width: int, reverse: bool = False) -> Line:
+        """A rule made of `char` that fades from bright to dark along the theme ramp."""
+        sizes = [width // 8, width // 4, width // 4]
+        sizes.append(width - sum(sizes))
+        segs: Line = [(char * n, f"g{3 - k}", "") for k, n in enumerate(sizes) if n]
+        return segs[::-1] if reverse else segs
+
     # --- blocks --------------------------------------------------------------
 
     def paragraph(self, block: Paragraph, width: int) -> list[Line]:
@@ -647,14 +787,16 @@ class Renderer:
 
     def heading(self, block: Heading, width: int) -> list[Line]:
         if block.level == 1:
-            return self.heading_box(block.text, width)
+            return self.heading_banner(block.text, width) if self.ansi else self.heading_box(block.text, width)
         if block.level == 2:
             lines = wrap(self.inline(block.text, "h2", "b"), width - 5)
-            return self.prefixed(lines, ("█▓▒░ ", "h2deco", "")) + [[("═" * width, "rule", "")]]
+            underline: Line = self.fade("▀", width) if self.ansi else [("═" * width, "rule", "")]
+            return self.prefixed(lines, ("█▓▒░ ", "h2deco", "")) + [underline]
         if block.level == 3:
             lines = wrap(self.inline(block.text, "h3", "b"), width - 2)
-            underline = max(text_width(plain(line)) for line in lines) + 2
-            return self.prefixed(lines, ("► ", "h3", "b")) + [[("─" * min(underline, width), "rule", "")]]
+            length = min(max(text_width(plain(line)) for line in lines) + 2, width)
+            underline = self.fade("─", length) if self.ansi else [("─" * length, "rule", "")]
+            return self.prefixed(lines, ("► ", "h3", "b")) + [underline]
         return self.prefixed(wrap(self.inline(block.text, "h4", "b"), width - 2), ("· ", "h4", "b"))
 
     def heading_box(self, text: str, width: int) -> list[Line]:
@@ -671,14 +813,34 @@ class Renderer:
         out.append([(" ", "text", ""), (" " * box_width, "shadow", "")])
         return out
 
+    def heading_banner(self, text: str, width: int) -> list[Line]:
+        """Level 1 heading, ANSI-art style: a solid bar whose ends dissolve into the page."""
+        segs = [(t.upper(), style, flags) for t, style, flags in self.inline(text, "h1", "b")]
+        inner = width - 8  # on each side: three shaded blocks and a space
+        indent = ("   ", "text", "")
+        out: list[Line] = [[indent, ("▄" * (width - 6), "h1box", "")]]
+        for line in wrap(segs, inner):
+            pad = " " * (inner - text_width(plain(line)))
+            out.append([("░▒▓", "h1box", ""), (" ", "h1", ""), *line, (pad + " ", "h1", ""), ("▓▒░", "h1box", "")])
+        out.append([indent, ("▀" * (width - 6), "h1box", "")])
+        out.append([])  # same height as heading_box(), so the scroll position survives a theme switch
+        return out
+
     def code_block(self, block: CodeBlock, width: int) -> list[Line]:
         inner = width - 4
         lang = block.lang
         label = f"[ {lang} ]" if lang and text_width(lang) + 8 < width else ""
-        top: Line = [("┌─", "codebox", "")]
+        # ANSI art: a slab in the code background, with half-block edges and an accent bar on the left
+        ansi = self.ansi
+        if ansi:
+            left, right = ("▌ ", "codelbl", ""), ("  ", "codeblk", "")
+        else:
+            left, right = ("│ ", "codebox", ""), (" │", "codebox", "")
+        top: Line = [("▄▄" if ansi else "┌─", "codebox", "")]
         if label:
             top.append((label, "codelbl", ""))
-        top.append(("─" * (width - 3 - text_width(label)) + "┐", "codebox", ""))
+        rest_width = width - 3 - text_width(label)
+        top.append(("▄" * (rest_width + 1) if ansi else "─" * rest_width + "┐", "codebox", ""))
         out = [top]
         for raw in block.lines or [""]:
             rest = raw.rstrip()
@@ -686,20 +848,22 @@ class Renderer:
                 chunk = clip(rest, inner) or rest[:1]
                 rest = rest[len(chunk) :]
                 pad = " " * (inner - text_width(chunk))
-                out.append([("│ ", "codebox", ""), (chunk + pad, "codeblk", ""), (" │", "codebox", "")])
+                out.append([left, (chunk + pad, "codeblk", ""), right])
                 if not rest:
                     break
-        out.append([("└" + "─" * (width - 2) + "┘", "codebox", "")])
+        out.append([("▀" * width if ansi else "└" + "─" * (width - 2) + "┘", "codebox", "")])
         return out
 
     def quote(self, block: Quote, width: int) -> list[Line]:
-        bar = ("▌ ", "quotebar", "")
+        bar = ("▒ " if self.ansi else "▌ ", "quotebar", "")
         return [[bar, *line] for line in self.blocks(block.blocks, width - 2)]
 
     def rule(self, block: Rule, width: int) -> list[Line]:
         deco = "░▒▓█▓▒░"
         left = max((width - len(deco) - 2) // 2, 0)
         right = max(width - left - len(deco) - 2, 0)
+        if self.ansi:  # the lines fade away from the center
+            return [[*self.fade("─", left, reverse=True), (f" {deco} ", "hrdeco", ""), *self.fade("─", right)]]
         return [[("─" * left + " ", "rule", ""), (deco, "hrdeco", ""), (" " + "─" * right, "rule", "")]]
 
     def list_block(self, block: ListBlock, width: int) -> list[Line]:
@@ -806,7 +970,8 @@ HELP_KEYS = [
     ("Home End  g G", "start / end of the document"),
     ("/", "search text (Enter confirms, Esc cancels)"),
     ("n  N", "next / previous match"),
-    ("T", "toggle dark / light theme"),
+    ("T", "next theme"),
+    ("S", "save the current theme as the default"),
     ("F3  o", "open the file list"),
     ("F6  Tab  →", "next file"),
     ("Shift+Tab  ←", "previous file"),
@@ -878,6 +1043,11 @@ class Pager:
         return self.files[self.file_index]
 
     @property
+    def ansi(self) -> bool:
+        """Is the current theme one of the ANSI-art ones?"""
+        return self.theme in ANSI_THEMES
+
+    @property
     def max_top(self) -> int:
         return max(len(self.lines) - self.view_height, 0)
 
@@ -888,9 +1058,17 @@ class Pager:
         inner = max(self.cols - 4, 10)  # frame, scrollbar and one column of padding on each side
         self.text_width = min(inner, self.max_width) if self.max_width else inner
         self.margin = (inner - self.text_width) // 2
-        self.lines = Renderer().render(self.text, self.text_width)
+        self.lines = Renderer(self.ansi).render(self.text, self.text_width)
         self.find_matches()
         self.scroll(0)
+
+    def next_theme(self) -> None:
+        names = list(THEMES)
+        was_ansi = self.ansi
+        self.theme = names[(names.index(self.theme) + 1) % len(names)]
+        if self.ansi != was_ansi:  # the ornaments changed, not only the colors
+            self.layout()
+        self.message = f"Theme: {theme_title(self.theme)} · S saves as default"
 
     def load(self, index: int) -> None:
         self.file_index = index % len(self.files)
@@ -991,7 +1169,9 @@ class Pager:
         elif key in ("end", "G"):
             self.scroll(len(self.lines))
         elif key in ("t", "T"):
-            self.theme = "light" if self.theme == "dark" else "dark"
+            self.next_theme()
+        elif key in ("s", "S"):
+            self.message = save_theme_message(self.theme)
         elif key in ("f1", "h", "?"):
             self.mode = "help"
         elif key in ("f3", "o"):
@@ -1038,18 +1218,25 @@ class Pager:
 
     def menu_bar(self) -> str:
         left = [(" ≡ ", "bar", ""), ("MDVIEW", "barhot", "b"), (f" │ {self.current_file}", "bar", "")]
-        return self.bar(left, f" [{self.file_index + 1}/{len(self.files)}] ")
+        return self.bar(left, f" {theme_title(self.theme)} │ [{self.file_index + 1}/{len(self.files)}] ")
 
     def frame_top(self) -> str:
         """Top border of the frame, with the file name centered."""
-        corner = "╔═[■]"
-        room = self.cols - len(corner) - 1
+        frame = sgr(self.theme, "frame", "b")
+        corner = "▄▄" if self.ansi else "╔═[■]"
+        fade_in, fade_out = ("█▓▒░", "░▒▓█") if self.ansi else ("", "")
+        room = self.cols - len(corner) - 1 - len(fade_in + fade_out)
         title = clip(f" {self.current_file.name} ", room - 2)
         left = (room - text_width(title)) // 2
         right = room - left - text_width(title)
-        return sgr(self.theme, "frame", "b") + corner + "═" * left + title + "═" * right + "╗"
+        if self.ansi:
+            title = sgr(self.theme, "strong", "b") + title + frame
+            return f"{frame}{corner}{'▄' * left}{fade_in}{title}{fade_out}{'▄' * right}▄"
+        return frame + corner + "═" * left + title + "═" * right + "╗"
 
     def frame_bottom(self) -> str:
+        if self.ansi:
+            return sgr(self.theme, "frame", "b") + "▀" * self.cols
         return sgr(self.theme, "frame", "b") + "╚" + "═" * (self.cols - 2) + "╝"
 
     def content(self) -> str:
@@ -1060,6 +1247,8 @@ class Pager:
         left_gutter = sgr(theme, "text") + " " * (1 + self.margin)
         right_gutter = sgr(theme, "text") + " " * max(self.cols - 3 - self.margin - self.text_width, 0)
         matches = set(self.matches)
+        side = "║"
+        thumb_char, track = ("█", "░") if self.ansi else ("■", "▒")
         # scrollbar thumb position (the first and last rows are the arrows)
         thumb = 1 + (round((height - 3) * self.top / self.max_top) if self.max_top else 0)
         out = []
@@ -1071,9 +1260,12 @@ class Pager:
             if height < 3:
                 scroll_char = "║"
             else:
-                scroll_char = "▲" if row == 0 else "▼" if row == height - 1 else "■" if row == thumb else "▒"
+                scroll_char = "▲" if row == 0 else "▼" if row == height - 1 else thumb_char if row == thumb else track
+            if self.ansi:  # the border dissolves away from the corners
+                edge = min(row, height - 1 - row)
+                side = "█▓▒░"[edge] if edge < 4 else "│"
             out.append(
-                f"{move_to(row + 3)}{frame}║{left_gutter}{compose(segs, self.text_width, theme)}{right_gutter}"
+                f"{move_to(row + 3)}{frame}{side}{left_gutter}{compose(segs, self.text_width, theme)}{right_gutter}"
                 f"\x1b[{self.cols}G{scrollbar}{scroll_char}"
             )
         return "".join(out)
@@ -1194,13 +1386,21 @@ Given a **directory**, opens every `.md` file in it (switch files with `F3` or `
 
 | Option | What it does |
 |---|---|
-| `-t`, `--theme dark|light` | Color theme. Default: `dark`, or the value of the `MDVIEW_THEME` variable |
+| `-t`, `--theme NAME` | Color theme (see below). Without it: the `MDVIEW_THEME` variable, then the saved default, then `dark` |
 | `--dark`, `--light` | Shortcuts for `--theme dark` and `--theme light` |
+| `--save-theme` | Saves the chosen theme as the default (same as the `S` key) |
+| `--list-themes` | Lists the themes |
 | `-w`, `--width N` | Maximum text width, in columns. Default: the terminal width |
 | `-n`, `--no-pager` | Prints the formatted document and exits, without going full screen |
 | `--no-color` | No colors (also applies when the `NO_COLOR` variable is set) |
 | `-V`, `--version` | Shows the version |
 | `-h`, `--help` | Shows this help |
+
+## Themes
+
+| Name | Theme | Look |
+|---|---|---|
+%THEMES%
 
 ## Keys (full-screen mode)
 
@@ -1213,11 +1413,14 @@ Given a **directory**, opens every `.md` file in it (switch files with `F3` or `
 ```
 %PROG% README.md
 %PROG% docs/ --light
+%PROG% README.md --theme acid
+%PROG% --theme acid --save-theme
 %PROG% docs/guide.md -w 100
 %PROG% README.md --no-pager | less -R
 ```
 """
-HELP_MD = HELP_MD.replace("%PROG%", PROG)
+HELP_THEME_ROWS = [f"| `{name}` | {theme_title(name)} | {THEME_INFO[name][1].capitalize()} |" for name in THEMES]
+HELP_MD = HELP_MD.replace("%PROG%", PROG).replace("%THEMES%", "\n".join(HELP_THEME_ROWS))
 HELP_KEY_ROWS = [f"| `{keys}` | {what[0].upper()}{what[1:]} |" for keys, what in HELP_KEYS]
 HELP_MD = HELP_MD.replace("%KEYS%", "\n".join(HELP_KEY_ROWS))
 
@@ -1243,7 +1446,7 @@ def show_help(theme: str, color: bool, width: int) -> None:
     subtitle = f"Markdown viewer · v{VERSION}"
     lines.append([("░▒▓█ ", "logo2", ""), (subtitle, "strong", "b"), (" █▓▒░", "logo2", "")])
     lines.append([])
-    lines += Renderer().render(HELP_MD, text_w)
+    lines += Renderer(theme in ANSI_THEMES).render(HELP_MD, text_w)
     lines.append([])
     emit(lines, theme, color, width)
 
@@ -1254,14 +1457,25 @@ class ArgumentParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
+def list_themes(current: str) -> None:
+    width = max(len(name) for name in THEMES)
+    title_width = max(len(theme_title(name)) for name in THEMES)
+    for name in THEMES:
+        title, look = THEME_INFO[name]
+        mark = "*" if name == current else " "
+        print(f"{mark} {name.ljust(width)}  {title.ljust(title_width)}  {look}")
+    print(f"\n* = default. Change it with '{PROG} --theme NAME --save-theme' or the S key.")
+
+
 def build_parser() -> ArgumentParser:
-    env_theme = os.environ.get("MDVIEW_THEME", "dark")
     # add_help=False: -h/--help show our own help (show_help), not argparse's
     parser = ArgumentParser(prog=PROG, add_help=False)
     parser.add_argument("paths", nargs="*", type=Path)
-    parser.add_argument("-t", "--theme", choices=list(THEMES), default=env_theme if env_theme in THEMES else "dark")
+    parser.add_argument("-t", "--theme", choices=list(THEMES))  # default: default_theme()
     parser.add_argument("--dark", dest="theme", action="store_const", const="dark")
     parser.add_argument("--light", dest="theme", action="store_const", const="light")
+    parser.add_argument("--save-theme", action="store_true")
+    parser.add_argument("--list-themes", action="store_true")
     parser.add_argument("-w", "--width", type=int)
     parser.add_argument("-n", "--no-pager", action="store_true")
     parser.add_argument("--no-color", action="store_true")
@@ -1292,7 +1506,7 @@ def print_files(files: list[Path], theme: str, color: bool, cols: int, max_width
     for k, file in enumerate(files):
         if k:
             sys.stdout.write("\n")
-        emit(Renderer().render(read_file(file), text_w), theme, color, cols)
+        emit(Renderer(theme in ANSI_THEMES).render(read_file(file), text_w), theme, color, cols)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1306,6 +1520,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.version:
         print(f"{PROG} {VERSION}")
         return 0
+    if args.list_themes:
+        list_themes(default_theme())
+        return 0
+    if args.save_theme:
+        if args.theme is None:
+            parser.error("--save-theme needs a theme: use it with --theme NAME")
+        print(save_theme_message(args.theme), file=sys.stderr if args.paths else sys.stdout)
+        if not args.paths:
+            return 0
+    args.theme = args.theme or default_theme()
     if args.help or not args.paths:
         show_help(args.theme, color, cols)
         return 0

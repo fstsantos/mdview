@@ -4,10 +4,14 @@ A Markdown viewer for the terminal that looks like a 90s DOS utility: a blue
 full-screen view, box-drawing frames, windows with drop shadows and the 16-color
 VGA palette.
 
+Besides the DOS look, it has themes styled after the ANSI art of the 90s BBS
+scene (ACiD, iCE and company): black background, color gradients and headings
+built from shaded blocks (`░▒▓█`).
+
 It is a single Python file with no dependencies beyond the standard library.
 
 ```
- ≡ MDVIEW │ docs/guide.md                                                 [1/3]
+ ≡ MDVIEW │ docs/guide.md                                      DOS Blue │ [1/3]
 ╔═[■]═══════════════════════════ guide.md ═════════════════════════════════════╗
 ║ ╔══════════════════════════════════════════════════════════════════════╗     ▲
 ║ ║ USER GUIDE                                                           ║     ■
@@ -61,6 +65,7 @@ subdirectories), in alphabetical order. With no arguments, it shows the help.
 ```sh
 mdview README.md
 mdview docs/ --light
+mdview README.md --theme acid
 mdview docs/guide.md -w 100
 mdview README.md --no-pager | less -R
 ```
@@ -69,8 +74,10 @@ mdview README.md --no-pager | less -R
 
 | Option | What it does |
 |---|---|
-| `-t`, `--theme dark\|light` | Color theme. Default: `dark`, or the value of `MDVIEW_THEME` |
+| `-t`, `--theme NAME` | Color theme (see [Themes](#themes)). Without it, the [default theme](#default-theme) is used |
 | `--dark`, `--light` | Shortcuts for `--theme dark` and `--theme light` |
+| `--save-theme` | Saves the chosen theme as the default (same as the `S` key) |
+| `--list-themes` | Lists the themes, marking the default one |
 | `-w`, `--width N` | Maximum text width, in columns (minimum 20). Default: the terminal width |
 | `-n`, `--no-pager` | Prints the formatted document and exits, without going full screen |
 | `--no-color` | No colors |
@@ -85,7 +92,8 @@ document is printed and the program exits.
 
 | Variable | Effect |
 |---|---|
-| `MDVIEW_THEME` | Default theme (`dark` or `light`) |
+| `MDVIEW_THEME` | Default theme (any name from [Themes](#themes)); wins over the saved default |
+| `XDG_CONFIG_HOME` | Where the saved default lives (`$XDG_CONFIG_HOME/mdview/config`). Default: `~/.config` |
 | `NO_COLOR` | If set, turns colors off, like `--no-color` |
 
 ### Keys (full-screen mode)
@@ -98,7 +106,8 @@ document is printed and the program exits.
 | `Home` `End` `g` `G` | Start / end of the document |
 | `/` | Search text (`Enter` confirms, `Esc` cancels) |
 | `n` `N` | Next / previous match |
-| `T` | Toggle dark / light theme |
+| `T` | Next theme |
+| `S` | Save the current theme as the default |
 | `F3` `o` | Open the file list |
 | `F6` `Tab` `→` | Next file |
 | `Shift+Tab` `←` | Previous file |
@@ -106,6 +115,49 @@ document is printed and the program exits.
 | `F10` `q` `Esc` | Quit |
 
 The mouse wheel also scrolls the document. Search is case-insensitive.
+
+## Themes
+
+| Name | Theme | Look |
+|---|---|---|
+| `dark` | DOS Blue | The classic blue of DOS editors and file managers (default) |
+| `light` | Paper White | White paper with navy bars, like Windows 3.x |
+| `acid` | Acid Wave | ANSI art: blue fading into cyan and white, yellow lettering |
+| `ice` | Ice Cold | ANSI art: cold grays and cyans, white highlights |
+| `fire` | Fire Storm | ANSI art: red, orange, yellow and white, like a flame |
+| `toxic` | Toxic Green | ANSI art: phosphor green going to yellow |
+| `neon` | Neon Night | ANSI art: magenta and cyan |
+
+The name is what `--theme` and `MDVIEW_THEME` take; the theme's title is shown
+at the right of the menu bar. `mdview --list-themes` prints this table.
+
+### Default theme
+
+To make a theme the default, press `S` while viewing with it, or run:
+
+```sh
+mdview --theme acid --save-theme
+```
+
+It is saved as a `theme = NAME` line in `~/.config/mdview/config`. The theme is
+chosen in this order: `--theme` (or `--dark` / `--light`), the `MDVIEW_THEME`
+variable, the saved default, `dark`.
+
+The ANSI-art themes change the ornaments as well as the colors: level 1
+headings become a solid bar whose ends dissolve into the page, rules fade along
+a color gradient, code blocks are slabs with half-block edges and the frame
+melts away from its corners.
+
+```
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▓▒░ guide.md ░▒▓█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+█    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄        ▲
+▓ ░▒▓ USER GUIDE                                                        ▓▒░     █
+▒    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ░
+░                                                                               ░
+▓ █▓▒░ Installation                                                             ░
+█ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀     ▼
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+```
 
 ## Supported Markdown
 
@@ -138,17 +190,22 @@ three-stage pipeline:
 Each line produced by stage 2 is a list of `(text, style, flags)` segments,
 where `style` is a name such as `h1` or `link`. Color is only decided in stage
 3, by looking the style up in the `THEMES` table. That separation is what lets
-a single key switch themes without rendering the document again.
+a single key switch themes without rendering the document again. The exception
+is the ornaments: the `Renderer` draws them with lines or with shaded blocks
+depending on the family of the theme, so switching between a DOS theme and an
+ANSI-art one renders the document again.
 
 The other sections of the file support this pipeline:
 
-- **Colors and themes**: the VGA palette, the two themes and `sgr()`, which
-  builds the ANSI sequences.
+- **Colors and themes**: the VGA palette, the themes and `sgr()`, which builds
+  the ANSI sequences.
 - **Text width**: `text_width()`, `clip()` and `wrap()` measure and wrap text in
   terminal columns (emoji and ideographs take 2, combining accents take 0).
 - **Command line**: `main()` and the help screen, which is itself written in
   Markdown and goes through the renderer.
 
-To create a theme, add an entry to `THEMES` with the same style names as the
-existing ones; it becomes available to `--theme` automatically (the `T` key
-only toggles between `dark` and `light`).
+To create a DOS-style theme, add an entry to `THEMES` with the same style names
+as `dark` and `light`. To create an ANSI-art theme, add an entry to
+`ANSI_THEMES` with a call to `ansi_theme()`, which derives every style from a
+four-color ramp (dark to bright) and a few accent colors. Either way the theme
+becomes available to `--theme` and to the `T` key automatically.
